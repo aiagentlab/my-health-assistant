@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import type { HospitalInfo } from '@/lib/api/types';
@@ -10,20 +10,25 @@ interface MiniMapProps {
 }
 
 declare global {
-  interface Window {
-    naver: any;
-  }
+  interface Window { naver: any; }
 }
 
-/**
- * Naver Maps mini map showing hospital markers
- * Loaded via next/script in layout — SSR safe
- */
 export default function MiniMap({ hospitals, userLocation }: MiniMapProps) {
   const mapRef = useRef<HTMLDivElement>(null);
+  const [ready, setReady] = useState(false);
 
+  // 네이버 지도 스크립트 로드 완료 대기
   useEffect(() => {
-    if (!mapRef.current || !window.naver || hospitals.length === 0) return;
+    if (window.naver?.maps) { setReady(true); return; }
+    const interval = setInterval(() => {
+      if (window.naver?.maps) { setReady(true); clearInterval(interval); }
+    }, 100);
+    return () => clearInterval(interval);
+  }, []);
+
+  // 지도 초기화
+  useEffect(() => {
+    if (!ready || !mapRef.current || hospitals.length === 0) return;
 
     const center = userLocation
       ? new window.naver.maps.LatLng(userLocation.lat, userLocation.lng)
@@ -36,7 +41,6 @@ export default function MiniMap({ hospitals, userLocation }: MiniMapProps) {
       mapDataControl: false,
     });
 
-    // Hospital markers ❶❷❸
     hospitals.slice(0, 3).forEach((hosp, i) => {
       new window.naver.maps.Marker({
         position: new window.naver.maps.LatLng(hosp.lat, hosp.lng),
@@ -48,7 +52,6 @@ export default function MiniMap({ hospitals, userLocation }: MiniMapProps) {
       });
     });
 
-    // User location marker
     if (userLocation) {
       new window.naver.maps.Marker({
         position: center,
@@ -59,24 +62,16 @@ export default function MiniMap({ hospitals, userLocation }: MiniMapProps) {
         },
       });
     }
-  }, [hospitals, userLocation]);
+  }, [ready, hospitals, userLocation]);
 
   return (
     <Box sx={{ borderRadius: 3, overflow: 'hidden', border: '1px solid #E2E8EE', mb: 2 }}>
-      {typeof window !== 'undefined' && window.naver ? (
-        <div ref={mapRef} style={{ height: 120, width: '100%' }} />
-      ) : (
-        <Box
-          sx={{
-            height: 120,
-            bgcolor: '#E8F5F1',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
+      {!ready ? (
+        <Box sx={{ height: 120, bgcolor: '#E8F5F1', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <Typography variant="caption" color="text.secondary">지도 로딩 중...</Typography>
         </Box>
+      ) : (
+        <div ref={mapRef} style={{ height: 120, width: '100%' }} />
       )}
     </Box>
   );
