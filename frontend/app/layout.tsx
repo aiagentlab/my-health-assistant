@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import Script from 'next/script';
 import { AppRouterCacheProvider } from '@mui/material-nextjs/v15-appRouter';
 import { Providers } from './providers';
 
@@ -8,9 +9,16 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
+  const naverClientId = process.env.NEXT_PUBLIC_NAVER_MAPS_CLIENT_ID;
   return (
     <html lang="ko">
       <body>
+        {naverClientId && (
+          <Script
+            src={`https://oapi.map.naver.com/openapi/v3/maps.js?ncpClientId=${naverClientId}`}
+            strategy="beforeInteractive"
+          />
+        )}
         <AppRouterCacheProvider>
           <Providers>
             {children}

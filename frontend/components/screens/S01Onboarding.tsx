@@ -292,7 +292,7 @@ export default function S01OnboardingScreen() {
         fullWidth
         size="large"
         disabled={!allRequired || loading}
-        onClick={() => handleStartConsultation(false)}
+        onClick={() => handleStartConsultation()}
         sx={{
           minHeight: 56,
           borderRadius: 3,
