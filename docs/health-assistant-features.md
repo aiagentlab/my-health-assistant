@@ -333,7 +333,7 @@
 
 ### 4.3 기술 스택 (참고)
 
-- **에이전트 프레임워크**: LangGraph v2 (Supervisor 패턴)
+- **에이전트 프레임워크**: LangGraph (latest) (Supervisor 패턴)
 - **LLM**: Claude / EXAONE 등 (on-premise 또는 API)
 - **백엔드**: FastAPI (Python)
 - **프론트엔드**: Next.js / React

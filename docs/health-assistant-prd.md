@@ -335,7 +335,7 @@ Phase 3: 확인 및 보완
                            │
 ┌──────────────────────────▼───────────────────────────────────┐
 │               Orchestrator Agent (Supervisor)                 │
-│              LangGraph v2 Supervisor Pattern                  │
+│              LangGraph Supervisor Pattern (latest)            │
 │                                                              │
 │  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌──────────────────┐   │
 │  │  문진    │ │  진단    │ │  검색   │ │   정보 제공       │   │
@@ -356,7 +356,7 @@ Phase 3: 확인 및 보완
 #### 4.2.1 Orchestrator Agent (Supervisor)
 
 - **역할**: 전체 대화 흐름 제어, 에이전트 라우팅, 상태 관리
-- **구현**: LangGraph v2 `langgraph-supervisor`
+- **구현**: LangGraph (latest) `langgraph-supervisor`
 - **상태 관리**: 대화 컨텍스트, 문진 진행 상태, 추천 결과를 Graph State로 관리
 - **라우팅 로직**:
 
@@ -429,7 +429,7 @@ elif emergency_detected(user_input):
 | Frontend | Next.js 15, React 19, TypeScript | 반응형 웹 (모바일 우선) |
 | UI Framework | Tailwind CSS, shadcn/ui | 접근성 준수 |
 | Backend API | FastAPI (Python 3.11+) | 비동기 처리 |
-| Agent Framework | LangGraph v2 | Supervisor 패턴 |
+| Agent Framework | LangGraph (latest) | Supervisor 패턴 |
 | LLM | Claude API / EXAONE (on-premise) | 용도별 모델 분리 가능 |
 | Vector Store | ChromaDB / Pinecone | 문진표 KB 저장 |
 | Database | PostgreSQL (Supabase) | 매핑 데이터, 병원 캐시 |
@@ -686,7 +686,7 @@ MVP에 포함되는 기능:
 - 국가건강검진 문진표 (국민건강보험공단)
 - 건강보험심사평가원 의료기관 정보 공공데이터
 - 네이버 지도 API 문서 (https://navermaps.github.io/maps.js.ncp/)
-- LangGraph v2 공식 문서
+- LangGraph 공식 문서 (latest)
 - 의료법 시행규칙 (의료 정보 제공 관련)
 
 ---

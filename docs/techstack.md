@@ -1,0 +1,23 @@
+## techstack 
+
+- package manager
+  - pnpm
+- frontend
+  - next.js, react.js latest, typescript, mui
+- backend
+  - python, langchain, langgraph
+- db
+  - postgresql (supabase)
+- deployment
+  - 2가지 제안하라.
+- external service
+  - 문진 상담 : google gemini flash 사용. 방법 제시 (create 3 teammate and discuss)
+  - 진료과 추천 : google gemini flash 사용. 방법 제시 (create 3 teammate and discuss)
+  - 병원검색: naver map api 방법 제시 (create 3 teammate and discuss)
+  - 병원상세 : 방법 제시 (create 3 teammate and discuss)
+  - PDF로 다운로드 : 방법 제시 (create 3 teammate and discuss)
+  - 로그인 및 인증 : clerk / google 인증을 사용
+- 구현 제외
+  - 결과 저장 : 구현 제외
+  - 카카오톡 공유 : 구현 제외
+  - 상담 피드백 : 구현 제외
