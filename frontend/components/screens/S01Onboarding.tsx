@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
@@ -51,26 +51,12 @@ export default function S01OnboardingScreen() {
 
   const allRequired = consentTerms && consentPrivacy;
 
-  // AC-6: 재방문 사용자 동의 건너뛰기
-  useEffect(() => {
-    const hasConsented = localStorage.getItem('health_consent_given');
-    if (hasConsented === 'true') {
-      handleStartConsultation(true);
-    }
-  }, []);
-
-  const handleStartConsultation = async (skipToScreening = false) => {
+  const handleStartConsultation = async () => {
     setLoading(true);
     setError(null);
     try {
       const { session_id } = await startConsultation();
       sessionStorage.setItem('health_session_id', session_id);
-      if (!skipToScreening) {
-        localStorage.setItem('health_consent_given', 'true');
-        if (consentLocation) {
-          localStorage.setItem('health_location_consent', 'true');
-        }
-      }
       router.push('/consultation/screening');
     } catch {
       setError('서버 연결에 실패했습니다. 잠시 후 다시 시도해주세요.');
