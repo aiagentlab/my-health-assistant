@@ -1,0 +1,67 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE / editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Node.js / pnpm / Next.js
+node_modules/
+.next/
+out/
+.turbo/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.pnpm-store/
+
+# Python (LangChain, LangGraph)
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+.env/
+*.egg-info/
+.eggs/
+*.egg
+
+# Env and secrets
+.env
+.env.local
+.env.*.local
+*.local
+
+# Logs / cache / temp
+*.log
+.cache/
+tmp/
+temp/
+
+# Test / coverage
+coverage/
+.nyc_output/
+htmlcov/
+.pytest_cache/
+.coverage
+.tox/
+
+# Supabase
+supabase/.branches/
+supabase/.temp/
+
+# Build / misc
+dist/
+build/
+*.tsbuildinfo
+.vercel/
+
+.bkit/
+.omc/
+.claude/context-snapshots/
