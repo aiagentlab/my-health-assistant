@@ -114,14 +114,33 @@ async def search_hospitals_by_dept(
         return _mock_hospitals(dept_code, lat, lng)
 
 
+def _guess_area(lat: float, lng: float) -> str:
+    """좌표 기반 대략적인 지역명 추정 (mock용)"""
+    areas = [
+        (37.5445, 127.0561, "성동구 성수동"),
+        (37.4979, 127.0276, "강남구 역삼동"),
+        (37.5547, 126.9707, "용산구 한강로"),
+        (37.5571, 126.9236, "마포구 서교동"),
+        (37.5133, 127.1001, "송파구 잠실동"),
+        (37.5216, 126.9243, "영등포구 여의도동"),
+        (37.5553, 126.9372, "서대문구 신촌동"),
+        (37.5404, 127.0696, "광진구 화양동"),
+        (37.5700, 126.9820, "종로구 종로"),
+        (37.5636, 126.9869, "중구 명동"),
+    ]
+    best = min(areas, key=lambda a: (a[0] - lat) ** 2 + (a[1] - lng) ** 2)
+    return best[2]
+
+
 def _mock_hospitals(dept_code: str, lat: float, lng: float) -> list[dict]:
-    """개발 환경 Mock 병원 데이터"""
+    """개발 환경 Mock 병원 데이터 — 입력 좌표 기준 지역으로 생성"""
     dept_name = next((k for k, v in DEPT_CODES.items() if v == dept_code), "내과")
+    area = _guess_area(lat, lng)
     mock_data = [
         {
             "id": f"mock_{dept_code}_1",
-            "name": f"서울 {dept_name} 의원",
-            "address": "서울특별시 강남구 테헤란로 123",
+            "name": f"{area.split()[0]} {dept_name} 의원",
+            "address": f"서울특별시 {area} 100",
             "phone": "02-1234-5678",
             "lat": lat + 0.001,
             "lng": lng + 0.001,
@@ -133,8 +152,8 @@ def _mock_hospitals(dept_code: str, lat: float, lng: float) -> list[dict]:
         },
         {
             "id": f"mock_{dept_code}_2",
-            "name": f"강남 {dept_name} 클리닉",
-            "address": "서울특별시 강남구 역삼동 456",
+            "name": f"{area.split()[0]} {dept_name} 클리닉",
+            "address": f"서울특별시 {area} 200",
             "phone": "02-9876-5432",
             "lat": lat + 0.003,
             "lng": lng - 0.002,
@@ -146,8 +165,8 @@ def _mock_hospitals(dept_code: str, lat: float, lng: float) -> list[dict]:
         },
         {
             "id": f"mock_{dept_code}_3",
-            "name": f"강남세브란스병원",
-            "address": "서울특별시 강남구 언주로 211",
+            "name": f"서울 {area.split()[0]} 병원",
+            "address": f"서울특별시 {area} 300",
             "phone": "02-2019-3114",
             "lat": lat - 0.005,
             "lng": lng + 0.004,

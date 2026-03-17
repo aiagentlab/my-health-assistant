@@ -4,11 +4,38 @@ API 문서: https://api.ncloud-docs.com/docs/ai-naver-mapsgeocoding
 인증: X-NCP-APIGW-API-KEY-ID + X-NCP-APIGW-API-KEY 헤더
 """
 import os
+import logging
 import httpx
+
+logger = logging.getLogger(__name__)
 
 NAVER_GEOCODING_URL = "https://naveropenapi.apigw.ntruss.com/map-geocode/v2/geocode"
 NAVER_DIRECTIONS_URL = "https://naveropenapi.apigw.ntruss.com/map-direction/v1/driving"
 NAVER_DIRECTIONS_15_URL = "https://naveropenapi.apigw.ntruss.com/map-direction-15/v1/driving"
+
+# 개발 환경 mock용 주요 장소 좌표 (Geocoding API 미구독 시 fallback)
+_KNOWN_PLACES: dict[str, tuple[float, float, str]] = {
+    "성수역": (37.5445, 127.0561, "서울특별시 성동구 뚝섬로 지하 273"),
+    "성수": (37.5445, 127.0561, "서울특별시 성동구 성수동"),
+    "강남역": (37.4979, 127.0276, "서울특별시 강남구 강남대로 396"),
+    "강남": (37.4979, 127.0276, "서울특별시 강남구"),
+    "서울역": (37.5547, 126.9707, "서울특별시 용산구 한강대로 405"),
+    "홍대입구역": (37.5571, 126.9236, "서울특별시 마포구 양화로 160"),
+    "홍대": (37.5571, 126.9236, "서울특별시 마포구 서교동"),
+    "잠실역": (37.5133, 127.1001, "서울특별시 송파구 올림픽로 지하 265"),
+    "잠실": (37.5133, 127.1001, "서울특별시 송파구 잠실동"),
+    "여의도역": (37.5216, 126.9243, "서울특별시 영등포구 여의나루로 지하 42"),
+    "여의도": (37.5216, 126.9243, "서울특별시 영등포구 여의도동"),
+    "신촌역": (37.5553, 126.9372, "서울특별시 서대문구 신촌역로 1"),
+    "신촌": (37.5553, 126.9372, "서울특별시 서대문구 신촌동"),
+    "건대입구역": (37.5404, 127.0696, "서울특별시 광진구 아차산로 지하 243"),
+    "건대": (37.5404, 127.0696, "서울특별시 광진구 화양동"),
+    "종로": (37.5700, 126.9820, "서울특별시 종로구"),
+    "명동": (37.5636, 126.9869, "서울특별시 중구 명동"),
+    "이태원": (37.5345, 126.9946, "서울특별시 용산구 이태원동"),
+    "판교역": (37.3948, 127.1112, "경기도 성남시 분당구 판교역로 160"),
+    "판교": (37.3948, 127.1112, "경기도 성남시 분당구 판교동"),
+}
 
 
 def _naver_headers() -> dict:
@@ -26,9 +53,12 @@ async def geocode_address(address: str) -> dict:
     Returns:
         {"lat": float, "lng": float, "road_address": str} 또는 {}
     """
-    if not os.environ.get("NAVER_CLIENT_ID"):
-        # 개발 환경 Mock: 서울 강남구 좌표 반환
-        return {"lat": 37.4979, "lng": 127.0276, "road_address": address}
+    client_id = os.environ.get("NAVER_CLIENT_ID", "")
+    client_secret = os.environ.get("NAVER_CLIENT_SECRET", "")
+
+    if not client_id or not client_secret:
+        logger.warning("NAVER_CLIENT_ID 또는 NAVER_CLIENT_SECRET 미설정 — mock 좌표 반환")
+        return _fallback_geocode(address)
 
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
@@ -42,7 +72,8 @@ async def geocode_address(address: str) -> dict:
 
         addresses = data.get("addresses", [])
         if not addresses:
-            return {}
+            logger.warning("Naver Geocoding 결과 없음: %s", address)
+            return _fallback_geocode(address)
 
         first = addresses[0]
         return {
@@ -50,8 +81,25 @@ async def geocode_address(address: str) -> dict:
             "lng": float(first.get("x", 0)),
             "road_address": first.get("roadAddress", address),
         }
-    except httpx.HTTPError:
-        return {}
+    except httpx.HTTPError as e:
+        logger.error("Naver Geocoding API 오류: %s", e)
+        return _fallback_geocode(address)
+
+
+def _fallback_geocode(address: str) -> dict:
+    """Geocoding API 사용 불가 시 주요 장소 좌표 매핑으로 fallback"""
+    query = address.strip()
+    # 정확한 매칭
+    if query in _KNOWN_PLACES:
+        lat, lng, road = _KNOWN_PLACES[query]
+        return {"lat": lat, "lng": lng, "road_address": road}
+    # 부분 매칭 (입력에 포함된 장소명)
+    for name, (lat, lng, road) in _KNOWN_PLACES.items():
+        if name in query:
+            return {"lat": lat, "lng": lng, "road_address": road}
+    # 기본값: 서울시청
+    logger.warning("알 수 없는 장소 '%s' — 서울시청 좌표 반환", address)
+    return {"lat": 37.5666, "lng": 126.9784, "road_address": address}
 
 
 async def get_directions(
