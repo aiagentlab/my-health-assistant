@@ -1,6 +1,7 @@
 import type {
   StartConsultationResponse,
   SSEChunk,
+  DiagnosisResult,
   HospitalSearchResponse,
   HospitalInfo,
   DirectionsResponse,
@@ -67,6 +68,19 @@ export async function sendMessage(
       }
     }
   }
+}
+
+// GET /api/consultation/diagnosis
+export async function getDiagnosis(
+  sessionId: string,
+  token?: string
+): Promise<DiagnosisResult> {
+  const params = new URLSearchParams({ session_id: sessionId });
+  const res = await fetch(`${API_BASE}/api/consultation/diagnosis?${params}`, {
+    headers: getHeaders(token),
+  });
+  if (!res.ok) throw new Error(`진단 결과 조회 실패: ${res.statusText}`);
+  return res.json();
 }
 
 // GET /api/hospital/geocode

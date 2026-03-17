@@ -130,6 +130,63 @@ async def send_message(
     )
 
 
+@router.get("/diagnosis")
+async def get_diagnosis(
+    session_id: str,
+    user: dict = Depends(verify_clerk_token),
+):
+    """
+    진단 결과 조회 — phase가 'diagnosis' 이상이면 diagnosis_node 실행 후 결과 반환
+
+    screening 완료 후 프론트엔드가 이 엔드포인트를 호출하여 진단을 트리거합니다.
+    """
+    graph = get_graph()
+    config = {"configurable": {"thread_id": session_id}}
+
+    try:
+        current_state = graph.get_state(config)
+        state_values = current_state.values if hasattr(current_state, "values") else {}
+    except Exception:
+        raise HTTPException(status_code=404, detail="세션을 찾을 수 없습니다.")
+
+    if not state_values:
+        raise HTTPException(status_code=404, detail="세션을 찾을 수 없습니다.")
+
+    # 세션 소유자 검증
+    owner = state_values.get("owner_user_id")
+    if owner and owner != user["user_id"]:
+        raise HTTPException(status_code=403, detail="접근 권한이 없습니다.")
+
+    # diagnosis_result가 이미 있으면 바로 반환
+    diagnosis_result = state_values.get("diagnosis_result", {})
+    if diagnosis_result and diagnosis_result.get("primary_department"):
+        return diagnosis_result
+
+    # phase가 diagnosis인데 결과가 없으면 → diagnosis_node 실행
+    phase = state_values.get("phase", "")
+    if phase not in ("diagnosis", "search", "info", "complete"):
+        raise HTTPException(status_code=400, detail="문진이 아직 완료되지 않았습니다.")
+
+    try:
+        # 빈 메시지로 그래프 invoke → supervisor가 diagnosis_node로 라우팅
+        graph.invoke({"messages": []}, config=config)
+
+        # 실행 후 결과 조회
+        updated_state = graph.get_state(config)
+        updated_values = updated_state.values if hasattr(updated_state, "values") else {}
+        diagnosis_result = updated_values.get("diagnosis_result", {})
+
+        if not diagnosis_result or not diagnosis_result.get("primary_department"):
+            raise HTTPException(status_code=500, detail="진단 결과를 생성하지 못했습니다.")
+
+        return diagnosis_result
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Diagnosis error session=%s: %s", session_id[:8], e, exc_info=True)
+        raise HTTPException(status_code=500, detail="진단 처리 중 오류가 발생했습니다.")
+
+
 @router.post("/resume")
 async def resume_consultation(
     req: ResumeRequest,

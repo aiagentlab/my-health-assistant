@@ -17,34 +17,34 @@ import ProgressBar from '@/components/ui/ProgressBar';
 import DepartmentCard from '@/components/recommendation/DepartmentCard';
 import UrgencyBadge from '@/components/recommendation/UrgencyBadge';
 import DisclaimerBanner from '@/components/ui/DisclaimerBanner';
+import { getDiagnosis } from '@/lib/api/consultation';
 import type { DiagnosisResult } from '@/lib/api/types';
-
-// Temporary mock — in production this comes from LangGraph state via API
-const MOCK_DIAGNOSIS: DiagnosisResult = {
-  primary_department: '신경과',
-  primary_dept_code: 'D004',
-  secondary_department: '내과',
-  secondary_dept_code: 'D001',
-  urgency: '조기방문권장',
-  reasoning:
-    '지속적인 두통과 어지러움 증상은 신경계 이상을 의심할 수 있습니다. 신경과 방문을 우선 권장드리며, 신경과가 어려우시면 내과에서 초기 검진 후 의뢰받는 방법도 있습니다.',
-  disclaimer:
-    '본 추천은 AI 분석 결과로 의사의 진단을 대체하지 않습니다. 증상이 심각하거나 갑자기 악화되면 즉시 응급실을 방문하세요.',
-};
 
 export default function S03RecommendationScreen() {
   const router = useRouter();
   const [diagnosis, setDiagnosis] = useState<DiagnosisResult | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    // TODO: fetch from API using session_id
-    // For now use mock data
-    sessionStorage.getItem('health_session_id');
-    setTimeout(() => {
-      setDiagnosis(MOCK_DIAGNOSIS);
+    const sessionId = sessionStorage.getItem('health_session_id');
+    if (!sessionId) {
+      setError('세션 정보가 없습니다. 상담을 다시 시작해주세요.');
       setLoading(false);
-    }, 800);
+      return;
+    }
+
+    getDiagnosis(sessionId)
+      .then((result) => {
+        setDiagnosis(result);
+      })
+      .catch((err) => {
+        console.error('진단 결과 조회 실패:', err);
+        setError('진단 결과를 불러오지 못했습니다. 다시 시도해주세요.');
+      })
+      .finally(() => {
+        setLoading(false);
+      });
   }, []);
 
   if (loading) {
@@ -70,7 +70,26 @@ export default function S03RecommendationScreen() {
     );
   }
 
-  if (!diagnosis) return null;
+  if (error || !diagnosis) {
+    return (
+      <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh', maxWidth: 480, mx: 'auto' }}>
+        <ConsultationAppBar title="진료과 추천" currentStep={3} totalSteps={6} />
+        <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', px: 3 }}>
+          <Alert
+            severity="warning"
+            sx={{ borderRadius: 2 }}
+            action={
+              <Button color="inherit" size="small" onClick={() => router.push('/consultation/screening')}>
+                다시 상담
+              </Button>
+            }
+          >
+            {error || '진단 결과를 불러오지 못했습니다.'}
+          </Alert>
+        </Box>
+      </Box>
+    );
+  }
 
   const isEmergency = diagnosis.urgency === '응급';
 
