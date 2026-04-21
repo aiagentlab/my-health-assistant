@@ -8,6 +8,7 @@ from langchain_core.messages import SystemMessage, HumanMessage
 from pydantic import BaseModel
 
 from app.state import HealthConsultationState
+from app.services.rag_retriever import retrieve_relevant_context
 
 DIAGNOSIS_SYSTEM_PROMPT = """당신은 의료 전문 AI로, 문진 결과를 분석하여 적절한 진료과를 추천합니다.
 
@@ -57,16 +58,44 @@ class DiagnosisOutput(BaseModel):
     reasoning: str
     disclaimer: str
 
-def run_diagnosis(state: HealthConsultationState) -> dict:
+async def run_diagnosis(state: HealthConsultationState) -> dict:
     """진단 노드 실행 — 부분 dict 반환"""
     llm = ChatGoogleGenerativeAI(
-        model="gemini-2.0-flash",
+        model="models/gemini-2.5-flash",
         google_api_key=os.environ["GOOGLE_API_KEY"],
         temperature=0.1,
     )
 
     screening_data = state.get("screening_data", {})
     structured_llm = llm.with_structured_output(DiagnosisOutput)
+    rag_context = {"matched_symptoms": [], "recommended_departments": [], "context_text": ""}
+
+    chief_complaint = screening_data.get("chief_complaint", "")
+    body_part = screening_data.get("body_part", "")
+    accompanying_symptoms = screening_data.get("accompanying_symptoms", [])
+
+    # RAG 실패는 non-fatal: 진단 체인은 기존 로직으로 계속 진행
+    try:
+        rag_context = await retrieve_relevant_context(
+            chief_complaint=chief_complaint,
+            body_part=body_part,
+            accompanying_symptoms=accompanying_symptoms,
+        )
+    except Exception:
+        rag_context = {"matched_symptoms": [], "recommended_departments": [], "context_text": ""}
+
+    rag_context_text = (rag_context.get("context_text") or "").strip()
+    rag_prompt_block = (
+        f"\n\nRAG 참고 컨텍스트:\n{rag_context_text}\n\n"
+        "중요: reasoning(추천 근거) 작성 시 반드시 아래 규칙을 따르세요:\n"
+        "1. 위 RAG 결과에서 매칭된 증상, 진료과 신뢰도, 관련 의학 지식을 구체적으로 인용하세요.\n"
+        "2. 예시: 'DB 증상 매칭 결과 두통(유사도 0.85)이 신경과(신뢰도 0.85)와 높은 연관성을 보이며, "
+        "한국 의사 국시 문항에서도 유사 증상에 대해 신경과 진료를 권장하고 있습니다.'\n"
+        "3. RAG에서 찾은 의학 지식(한국의학시험/의학교과서)의 내용을 1~2줄 요약하여 근거로 포함하세요.\n"
+        "4. reasoning은 4~5문장으로, DB 근거 + 임상 판단을 모두 포함하세요."
+        if rag_context_text
+        else ""
+    )
 
     prompt = f"""다음 문진 결과를 분석하여 적절한 진료과를 추천해주세요.
 
@@ -77,7 +106,7 @@ def run_diagnosis(state: HealthConsultationState) -> dict:
 - 심각도: {screening_data.get('severity', '미입력')}/10
 - 동반 증상: {screening_data.get('accompanying_symptoms', [])}
 - 과거 병력: {screening_data.get('medical_history', '없음')}
-"""
+{rag_prompt_block}"""
 
     result = structured_llm.invoke([
         SystemMessage(content=DIAGNOSIS_SYSTEM_PROMPT),
@@ -86,5 +115,6 @@ def run_diagnosis(state: HealthConsultationState) -> dict:
 
     return {
         "diagnosis_result": result.model_dump(),
-        "phase": "search"
+        "phase": "search",
+        "rag_context": rag_context,
     }

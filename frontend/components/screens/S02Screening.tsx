@@ -16,7 +16,8 @@ import EmergencyModal from '@/components/ui/EmergencyModal';
 import ExitConfirmModal from '@/components/ui/ExitConfirmModal';
 import DisclaimerBanner from '@/components/ui/DisclaimerBanner';
 import Toast from '@/components/ui/Toast';
-import { sendMessage } from '@/lib/api/consultation';
+import { sendMessage, resumeConsultation, getDiagnosis } from '@/lib/api/consultation';
+import { useClerkToken } from '@/lib/auth/useClerkToken';
 import type { SSEChunk } from '@/lib/api/types';
 import { useToast } from '@/lib/toast/useToast';
 
@@ -47,6 +48,7 @@ export default function S02ScreeningScreen() {
   const router = useRouter();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const { getAuthToken } = useClerkToken();
 
   const [messages, setMessages] = useState<ChatMessage[]>([INITIAL_AI_MESSAGE]);
   const [inputValue, setInputValue] = useState('');
@@ -56,11 +58,13 @@ export default function S02ScreeningScreen() {
   const [emergencyKeywords, setEmergencyKeywords] = useState<string[]>([]);
   const [exitConfirmOpen, setExitConfirmOpen] = useState(false);
   const [sendDisabled, setSendDisabled] = useState(false);
+  const [diagnosisLoading, setDiagnosisLoading] = useState(false);
   const { toast, showToast, hideToast } = useToast();
 
-  const sessionId = typeof window !== 'undefined'
-    ? sessionStorage.getItem('health_session_id') || ''
-    : '';
+  const [sessionId, setSessionId] = useState('');
+  useEffect(() => {
+    setSessionId(sessionStorage.getItem('health_session_id') || '');
+  }, []);
 
   // Auto-scroll to latest message
   useEffect(() => {
@@ -88,6 +92,7 @@ export default function S02ScreeningScreen() {
     const aiMsg: ChatMessage = { role: 'ai', content: '', timestamp: new Date() };
 
     try {
+      const token = await getAuthToken() ?? undefined;
       await sendMessage(sessionId, messageText, (chunk: SSEChunk) => {
         if (chunk.error) {
           showToast('서버 오류가 발생했습니다.', 'error');
@@ -118,13 +123,26 @@ export default function S02ScreeningScreen() {
           // Phase progression
           if (chunk.phase && chunk.phase !== 'screening') {
             if (chunk.phase === 'diagnosis') {
-              router.push('/consultation/recommendation');
+              // Pre-fetch diagnosis to avoid race condition with checkpoint persistence
+              setDiagnosisLoading(true);
+              (async () => {
+                try {
+                  const diagToken = await getAuthToken() ?? undefined;
+                  const result = await getDiagnosis(sessionId, diagToken);
+                  sessionStorage.setItem('diagnosis_result', JSON.stringify(result));
+                  router.push('/consultation/recommendation');
+                } catch {
+                  showToast('진단 결과를 불러오지 못했습니다. 다시 시도해주세요.', 'error');
+                } finally {
+                  setDiagnosisLoading(false);
+                }
+              })();
             }
           } else if (currentPhase < 5) {
             setCurrentPhase(prev => Math.min(prev + 1, 5));
           }
         }
-      });
+      }, token);
     } catch (err) {
       setIsAITyping(false);
       setSendDisabled(false);
@@ -176,6 +194,13 @@ export default function S02ScreeningScreen() {
           />
         ))}
         {isAITyping && <TypingIndicator />}
+        {diagnosisLoading && (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 1, px: 1 }}>
+            <Typography variant="body2" color="text.secondary">
+              진단 분석 중...
+            </Typography>
+          </Box>
+        )}
         <div ref={messagesEndRef} />
       </Box>
 
@@ -247,14 +272,24 @@ export default function S02ScreeningScreen() {
       <EmergencyModal
         open={emergencyOpen}
         keywords={emergencyKeywords}
-        onCall119={() => {
+        onCall119={async () => {
           setEmergencyOpen(false);
-          // LangGraph Command(resume="call_119") will be sent
+          try {
+            const token = await getAuthToken() ?? undefined;
+            await resumeConsultation(sessionId, 'call_119', token);
+            router.push('/consultation/summary');
+          } catch {
+            showToast('응급 처리 중 오류가 발생했습니다.', 'error');
+          }
         }}
-        onContinue={() => {
+        onContinue={async () => {
           setEmergencyOpen(false);
-          // LangGraph Command(resume="continue_consultation") will be sent
-          handleSend('상담을 계속 진행하겠습니다');
+          try {
+            const token = await getAuthToken() ?? undefined;
+            await resumeConsultation(sessionId, 'continue_consultation', token);
+          } catch {
+            showToast('상담 재개 중 오류가 발생했습니다.', 'error');
+          }
         }}
       />
 

@@ -10,19 +10,29 @@ interface NaverMapEmbedProps {
   zoom?: number;
 }
 
-declare global {
-  interface Window { naver: any; }
-}
+type NaverMapsSDK = {
+  LatLng: new (lat: number, lng: number) => unknown;
+  Map: new (element: HTMLElement, options: Record<string, unknown>) => unknown;
+  Marker: new (options: Record<string, unknown>) => unknown;
+};
+
+type NaverWindow = Window & {
+  naver?: {
+    maps?: NaverMapsSDK;
+  };
+};
 
 function initMap(container: HTMLDivElement, lat: number, lng: number, name: string, zoom: number) {
-  const position = new window.naver.maps.LatLng(lat, lng);
-  const map = new window.naver.maps.Map(container, {
+  const maps = (window as NaverWindow).naver?.maps;
+  if (!maps) return;
+  const position = new maps.LatLng(lat, lng);
+  const map = new maps.Map(container, {
     center: position,
     zoom,
     zoomControl: false,
     mapDataControl: false,
   });
-  new window.naver.maps.Marker({
+  new maps.Marker({
     position,
     map,
     title: name,
@@ -34,22 +44,21 @@ function initMap(container: HTMLDivElement, lat: number, lng: number, name: stri
 
 export default function NaverMapEmbed({ lat, lng, name, zoom = 16 }: NaverMapEmbedProps) {
   const mapRef = useRef<HTMLDivElement>(null);
-  const [ready, setReady] = useState(false);
+  const [ready, setReady] = useState(
+    () => typeof window !== 'undefined' && Boolean((window as NaverWindow).naver?.maps)
+  );
 
   // 네이버 지도 스크립트 로드 완료 대기
   useEffect(() => {
-    if (window.naver?.maps) {
-      setReady(true);
-      return;
-    }
+    if (ready) return;
     const interval = setInterval(() => {
-      if (window.naver?.maps) {
+      if ((window as NaverWindow).naver?.maps) {
         setReady(true);
         clearInterval(interval);
       }
     }, 100);
     return () => clearInterval(interval);
-  }, []);
+  }, [ready]);
 
   // 지도 초기화 (ready + DOM 마운트 이후)
   useEffect(() => {

@@ -19,6 +19,7 @@ import ProgressBar from '@/components/ui/ProgressBar';
 import DisclaimerBanner from '@/components/ui/DisclaimerBanner';
 import Toast from '@/components/ui/Toast';
 import { downloadConsultationPDF } from '@/lib/api/consultation';
+import { useClerkToken } from '@/lib/auth/useClerkToken';
 import type { DiagnosisResult, HospitalInfo } from '@/lib/api/types';
 import { useToast } from '@/lib/toast/useToast';
 
@@ -69,6 +70,7 @@ const URGENCY_COLORS = {
 
 export default function S06SummaryScreen() {
   const router = useRouter();
+  const { getAuthToken } = useClerkToken();
   const [summary, setSummary] = useState<SummaryData | null>(null);
   const [pdfLoading, setPdfLoading] = useState(false);
   const { toast, showToast, hideToast } = useToast();
@@ -93,7 +95,8 @@ export default function S06SummaryScreen() {
 
     setPdfLoading(true);
     try {
-      const blob = await downloadConsultationPDF(sessionId);
+      const token = await getAuthToken() ?? undefined;
+      const blob = await downloadConsultationPDF(sessionId, token);
       // Trigger download
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');

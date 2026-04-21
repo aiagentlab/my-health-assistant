@@ -9,9 +9,9 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
-NAVER_GEOCODING_URL = "https://naveropenapi.apigw.ntruss.com/map-geocode/v2/geocode"
-NAVER_DIRECTIONS_URL = "https://naveropenapi.apigw.ntruss.com/map-direction/v1/driving"
-NAVER_DIRECTIONS_15_URL = "https://naveropenapi.apigw.ntruss.com/map-direction-15/v1/driving"
+NAVER_GEOCODING_URL = "https://maps.apigw.ntruss.com/map-geocode/v2/geocode"
+NAVER_DIRECTIONS_URL = "https://maps.apigw.ntruss.com/map-direction/v1/driving"
+NAVER_DIRECTIONS_15_URL = "https://maps.apigw.ntruss.com/map-direction-15/v1/driving"
 
 # 개발 환경 mock용 주요 장소 좌표 (Geocoding API 미구독 시 fallback)
 _KNOWN_PLACES: dict[str, tuple[float, float, str]] = {

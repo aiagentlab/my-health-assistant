@@ -16,6 +16,7 @@ import LocationOnOutlinedIcon from '@mui/icons-material/LocationOnOutlined';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 
 import { startConsultation } from '@/lib/api/consultation';
+import { useClerkToken } from '@/lib/auth/useClerkToken';
 
 const FEATURES = [
   {
@@ -43,6 +44,7 @@ const FEATURES = [
 
 export default function S01OnboardingScreen() {
   const router = useRouter();
+  const { getAuthToken } = useClerkToken();
   const [consentTerms, setConsentTerms] = useState(false);
   const [consentPrivacy, setConsentPrivacy] = useState(false);
   const [consentLocation, setConsentLocation] = useState(false);
@@ -55,7 +57,8 @@ export default function S01OnboardingScreen() {
     setLoading(true);
     setError(null);
     try {
-      const { session_id } = await startConsultation();
+      const token = await getAuthToken() ?? undefined;
+      const { session_id } = await startConsultation(token);
       sessionStorage.setItem('health_session_id', session_id);
       router.push('/consultation/screening');
     } catch {

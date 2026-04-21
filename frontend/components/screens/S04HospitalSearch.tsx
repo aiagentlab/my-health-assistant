@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
@@ -11,9 +11,21 @@ import MenuItem from '@mui/material/MenuItem';
 import FormControl from '@mui/material/FormControl';
 import CircularProgress from '@mui/material/CircularProgress';
 import Alert from '@mui/material/Alert';
+import Paper from '@mui/material/Paper';
+import List from '@mui/material/List';
+import ListItemButton from '@mui/material/ListItemButton';
+import ListItemText from '@mui/material/ListItemText';
+import LocationOnIcon from '@mui/icons-material/LocationOn';
 import GpsFixedIcon from '@mui/icons-material/GpsFixed';
 import SearchIcon from '@mui/icons-material/Search';
 import SortIcon from '@mui/icons-material/Sort';
+
+interface SuggestItem {
+  name: string;
+  address: string;
+  lat: number;
+  lng: number;
+}
 
 import ConsultationAppBar from '@/components/ui/ConsultationAppBar';
 import ProgressBar from '@/components/ui/ProgressBar';
@@ -22,7 +34,8 @@ import MiniMap from '@/components/maps/MiniMap';
 import Toast from '@/components/ui/Toast';
 import type { HospitalInfo } from '@/lib/api/types';
 import { useToast } from '@/lib/toast/useToast';
-import { searchHospitals, geocodeAddress } from '@/lib/api/consultation';
+import { searchHospitals, geocodeAddress, searchPlaces } from '@/lib/api/consultation';
+import { useClerkToken } from '@/lib/auth/useClerkToken';
 
 type SortOption = 'distance' | 'rating' | 'name';
 
@@ -37,12 +50,63 @@ export default function S04HospitalSearchScreen() {
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [sortBy, setSortBy] = useState<SortOption>('distance');
   const [searched, setSearched] = useState(false);
+  const { getAuthToken } = useClerkToken();
   const { toast, showToast, hideToast } = useToast();
+  const [suggestions, setSuggestions] = useState<SuggestItem[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const debounceRef = useRef<NodeJS.Timeout | null>(null);
 
   const deptCode =
     typeof window !== 'undefined' ? sessionStorage.getItem('search_dept_code') || 'D004' : 'D004';
   const deptName =
     typeof window !== 'undefined' ? sessionStorage.getItem('search_dept_name') || '신경과' : '신경과';
+
+  // 네이버 지역 검색 API로 장소 자동완성
+  const searchSuggestions = useCallback(async (query: string) => {
+    if (!query.trim() || query.trim().length < 2) {
+      setSuggestions([]);
+      setShowSuggestions(false);
+      return;
+    }
+
+    try {
+      const token = await getAuthToken() ?? undefined;
+      const result = await searchPlaces(query, token);
+      const items: SuggestItem[] = result.places.map((p) => ({
+        name: p.name,
+        address: p.address,
+        lat: p.lat,
+        lng: p.lng,
+      }));
+      setSuggestions(items);
+      setShowSuggestions(items.length > 0);
+    } catch {
+      setSuggestions([]);
+      setShowSuggestions(false);
+    }
+  }, [getAuthToken]);
+
+  const handleInputChange = (value: string) => {
+    setAddressInput(value);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    if (value.trim().length >= 2) {
+      debounceRef.current = setTimeout(() => searchSuggestions(value), 300);
+    } else {
+      setSuggestions([]);
+      setShowSuggestions(false);
+    }
+  };
+
+  const handleSelectSuggestion = (item: SuggestItem) => {
+    const displayName = item.address || item.name;
+    setAddressInput(displayName);
+    setShowSuggestions(false);
+    setSuggestions([]);
+    sessionStorage.setItem('search_address', item.name);
+    const loc = { lat: item.lat, lng: item.lng };
+    setUserLocation(loc);
+    performSearch(loc);
+  };
 
   /**
    * 위치 기반 병원 검색 — 반경 자동 확대 (1km → 3km → 5km)
@@ -51,7 +115,7 @@ export default function S04HospitalSearchScreen() {
     setLoading(true);
     // S05에서 길찾기 API 호출 시 사용
     sessionStorage.setItem('user_location', JSON.stringify(location));
-    const token = undefined;
+    const token = await getAuthToken() ?? undefined;
 
     let found: HospitalInfo[] = [];
     let usedRadius = RADIUS_STEPS[0];
@@ -90,6 +154,7 @@ export default function S04HospitalSearchScreen() {
       (pos) => {
         const loc = { lat: pos.coords.latitude, lng: pos.coords.longitude };
         setUserLocation(loc);
+        sessionStorage.setItem('search_address', '현재 위치');
         performSearch(loc);
       },
       () => {
@@ -105,8 +170,26 @@ export default function S04HospitalSearchScreen() {
   const handleAddressSearch = async () => {
     if (!addressInput.trim()) return;
     setLoading(true);
-    const token = undefined;
+    setShowSuggestions(false);
+    const token = await getAuthToken() ?? undefined;
 
+    // 1. 먼저 장소 검색 API 시도 (장소명 지원: "신정역", "강남역" 등)
+    try {
+      const placesResult = await searchPlaces(addressInput.trim(), token);
+      if (placesResult.places.length > 0) {
+        const place = placesResult.places[0];
+        setAddressInput(place.address || place.name);
+        sessionStorage.setItem('search_address', place.name);
+        const loc = { lat: place.lat, lng: place.lng };
+        setUserLocation(loc);
+        await performSearch(loc);
+        return;
+      }
+    } catch {
+      // places 실패 → geocode fallback
+    }
+
+    // 2. Fallback: Geocoding API (행정 주소)
     const geocoded = await geocodeAddress(addressInput.trim(), token);
     if (!geocoded) {
       showToast('주소를 찾을 수 없습니다. 다시 입력해주세요.', 'warning');
@@ -158,37 +241,78 @@ export default function S04HospitalSearchScreen() {
           현재 위치로 검색
         </Button>
 
-        {/* Address Input */}
-        <TextField
-          fullWidth
-          placeholder="주소 입력 (예: 강남역, 서울시 강남구)"
-          value={addressInput}
-          onChange={(e) => setAddressInput(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') handleAddressSearch();
-          }}
-          InputProps={{
-            endAdornment: (
-              <InputAdornment position="end">
-                <Button
-                  onClick={handleAddressSearch}
-                  disabled={loading || !addressInput.trim()}
-                  sx={{ minWidth: 0, color: '#1B6B5A' }}
-                >
-                  <SearchIcon />
-                </Button>
-              </InputAdornment>
-            ),
-          }}
-          sx={{
-            mb: 2,
-            '& .MuiOutlinedInput-root': {
-              borderRadius: 3,
-              '& fieldset': { borderColor: '#E2E8EE' },
-              '&.Mui-focused fieldset': { borderColor: '#1B6B5A' },
-            },
-          }}
-        />
+        {/* Address Input with Autocomplete */}
+        <Box sx={{ position: 'relative', mb: 2 }}>
+          <TextField
+            fullWidth
+            placeholder="장소 또는 주소 입력 (예: 강남역, 서울 마포구)"
+            value={addressInput}
+            onChange={(e) => handleInputChange(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                setShowSuggestions(false);
+                handleAddressSearch();
+              }
+            }}
+            onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
+            onFocus={() => { if (suggestions.length > 0) setShowSuggestions(true); }}
+            InputProps={{
+              endAdornment: (
+                <InputAdornment position="end">
+                  <Button
+                    onClick={handleAddressSearch}
+                    disabled={loading || !addressInput.trim()}
+                    sx={{ minWidth: 0, color: '#1B6B5A' }}
+                  >
+                    <SearchIcon />
+                  </Button>
+                </InputAdornment>
+              ),
+            }}
+            sx={{
+              '& .MuiOutlinedInput-root': {
+                borderRadius: 3,
+                '& fieldset': { borderColor: '#E2E8EE' },
+                '&.Mui-focused fieldset': { borderColor: '#1B6B5A' },
+              },
+            }}
+          />
+          {showSuggestions && suggestions.length > 0 && (
+            <Paper
+              sx={{
+                position: 'absolute',
+                top: '100%',
+                left: 0,
+                right: 0,
+                zIndex: 10,
+                mt: 0.5,
+                borderRadius: 2,
+                border: '1px solid #E2E8EE',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                maxHeight: 240,
+                overflow: 'auto',
+              }}
+            >
+              <List dense disablePadding>
+                {suggestions.map((item, idx) => (
+                  <ListItemButton
+                    key={`${item.lat}-${item.lng}-${idx}`}
+                    onClick={() => handleSelectSuggestion(item)}
+                    sx={{ px: 2, py: 1, '&:hover': { bgcolor: '#E8F5F1' } }}
+                  >
+                    <LocationOnIcon sx={{ fontSize: 18, color: '#1B6B5A', mr: 1.5, flexShrink: 0 }} />
+                    <ListItemText
+                      primary={item.name}
+                      secondary={item.address !== item.name ? item.address : undefined}
+                      primaryTypographyProps={{ variant: 'body2', fontWeight: 600 }}
+                      secondaryTypographyProps={{ variant: 'caption', color: 'text.secondary' }}
+                    />
+                  </ListItemButton>
+                ))}
+              </List>
+            </Paper>
+          )}
+        </Box>
 
         {/* Loading */}
         {loading && (

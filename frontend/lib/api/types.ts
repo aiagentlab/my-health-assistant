@@ -37,6 +37,29 @@ export interface DiagnosisResult {
   urgency: '일반' | '조기방문권장' | '응급';
   reasoning: string;
   disclaimer: string;
+  rag_context?: {
+    matched_symptoms?: Array<{
+      name_ko: string;
+      category: string;
+      body_part: string;
+      similarity: number;
+      emergency_flag: boolean;
+    }>;
+    knowledge_chunks?: Array<{
+      content: string;
+      source: string;
+      similarity: number;
+      category: string;
+    }>;
+    recommended_departments?: Array<{
+      department_name: string;
+      department_code: string;
+      priority: number;
+      confidence: number;
+      urgency: string;
+      notes: string;
+    }>;
+  };
 }
 
 export interface HospitalInfo {
@@ -51,6 +74,7 @@ export interface HospitalInfo {
   distance_m: number;
   rating?: number;
   is_open_now: boolean;
+  hospital_type?: string;
 }
 
 export interface UserLocation {

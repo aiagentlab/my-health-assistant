@@ -69,6 +69,7 @@ async def start_consultation(
         "selected_hospital": {},
         "emergency_flag": False,
         "emergency_keywords": [],
+        "rag_context": {},
         "user_location": {},
         "owner_user_id": user["user_id"],
     }
@@ -107,7 +108,19 @@ async def send_message(
                 stream_mode="messages"
             ):
                 token, metadata = chunk
+                # screening_node의 대화 응답만 스트리밍 (구조화 추출 JSON 제외)
+                langgraph_node = getattr(metadata, 'get', lambda *a: metadata.get(*a) if isinstance(metadata, dict) else None)('langgraph_node', '') if metadata else ''
+                if isinstance(metadata, dict):
+                    langgraph_node = metadata.get('langgraph_node', '')
                 if hasattr(token, 'content') and token.content:
+                    # 추출 체인의 JSON 출력 필터링
+                    content = token.content.strip()
+                    if content.startswith('{') and content.endswith('}'):
+                        try:
+                            json.loads(content)
+                            continue  # JSON 구조화 출력은 스킵
+                        except (json.JSONDecodeError, ValueError):
+                            pass
                     data = {"content": token.content, "done": False}
                     yield f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
 
@@ -160,7 +173,8 @@ async def get_diagnosis(
     # diagnosis_result가 이미 있으면 바로 반환
     diagnosis_result = state_values.get("diagnosis_result", {})
     if diagnosis_result and diagnosis_result.get("primary_department"):
-        return diagnosis_result
+        rag_context = state_values.get("rag_context", {})
+        return {**diagnosis_result, "rag_context": rag_context}
 
     # phase가 diagnosis인데 결과가 없으면 → diagnosis_node 실행
     phase = state_values.get("phase", "")
@@ -168,8 +182,8 @@ async def get_diagnosis(
         raise HTTPException(status_code=400, detail="문진이 아직 완료되지 않았습니다.")
 
     try:
-        # 빈 메시지로 그래프 invoke → supervisor가 diagnosis_node로 라우팅
-        graph.invoke({"messages": []}, config=config)
+        # 빈 메시지로 그래프 ainvoke → supervisor가 diagnosis_node로 라우팅
+        await graph.ainvoke({"messages": []}, config=config)
 
         # 실행 후 결과 조회
         updated_state = graph.get_state(config)
@@ -179,7 +193,8 @@ async def get_diagnosis(
         if not diagnosis_result or not diagnosis_result.get("primary_department"):
             raise HTTPException(status_code=500, detail="진단 결과를 생성하지 못했습니다.")
 
-        return diagnosis_result
+        rag_context = updated_values.get("rag_context", {})
+        return {**diagnosis_result, "rag_context": rag_context}
     except HTTPException:
         raise
     except Exception as e:
@@ -220,7 +235,7 @@ async def resume_consultation(
 
     try:
         # Command(resume=value) — interrupt()의 반환값으로 전달
-        graph.invoke(Command(resume=req.decision), config=config)
+        await graph.ainvoke(Command(resume=req.decision), config=config)
     except Exception as e:
         logger.error("Resume error session=%s: %s", req.session_id[:8], e, exc_info=True)
         raise HTTPException(status_code=500, detail="재개 처리 중 오류가 발생했습니다.")
