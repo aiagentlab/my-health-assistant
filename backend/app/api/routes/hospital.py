@@ -1,5 +1,7 @@
 """병원 검색/상세/길찾기 API 엔드포인트"""
+import os
 import re
+import httpx
 from fastapi import APIRouter, Query, HTTPException, Depends, Path
 from app.services.hira_api import search_hospitals_by_dept, DEPT_CODES
 from app.services.naver_maps import get_directions, geocode_address
@@ -8,7 +10,7 @@ from app.middleware.auth import verify_clerk_token
 router = APIRouter()
 
 # hospital_id 유효성 검사 패턴
-HOSPITAL_ID_PATTERN = re.compile(r'^[A-Za-z0-9_\-]{1,64}$')
+HOSPITAL_ID_PATTERN = re.compile(r'^[A-Za-z0-9_\-\+\/\=]{1,200}$')
 
 
 @router.get("/search")
@@ -59,6 +61,62 @@ async def geocode(
     return result
 
 
+@router.get("/places")
+async def search_places(
+    query: str = Query(..., min_length=1, description="장소 검색어"),
+    user: dict = Depends(verify_clerk_token),
+):
+    """
+    장소명 검색 (자동완성) — 네이버 지역 검색 API
+    "신정역", "강남역", "홍대" 같은 장소명을 검색하여 좌표와 주소를 반환
+    """
+    client_id = os.environ.get("NAVER_SEARCH_CLIENT_ID", "")
+    client_secret = os.environ.get("NAVER_SEARCH_CLIENT_SECRET", "")
+
+    if not client_id or not client_secret:
+        return {"places": [], "total": 0}
+
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            response = await client.get(
+                "https://openapi.naver.com/v1/search/local.json",
+                params={"query": query, "display": 5},
+                headers={
+                    "X-Naver-Client-Id": client_id,
+                    "X-Naver-Client-Secret": client_secret,
+                },
+            )
+            response.raise_for_status()
+            data = response.json()
+
+        places = []
+        for item in data.get("items", []):
+            # mapx/mapy는 카텍 좌표(KATEC) * 10^7 형태 → WGS84 변환
+            mapx = item.get("mapx", "0")
+            mapy = item.get("mapy", "0")
+            try:
+                lng = float(mapx) / 10_000_000
+                lat = float(mapy) / 10_000_000
+            except (ValueError, TypeError):
+                continue
+
+            # HTML 태그 제거 (<b>, </b>)
+            title = item.get("title", "").replace("<b>", "").replace("</b>", "")
+
+            places.append({
+                "name": title,
+                "address": item.get("roadAddress") or item.get("address", ""),
+                "category": item.get("category", ""),
+                "lat": lat,
+                "lng": lng,
+            })
+
+        return {"places": places, "total": len(places)}
+
+    except Exception:
+        return {"places": [], "total": 0}
+
+
 @router.get("/{hospital_id}/directions")
 async def get_hospital_directions(
     hospital_id: str = Path(..., description="병원 ID"),
@@ -79,11 +137,17 @@ async def get_hospital_directions(
         to_lng=to_lng,
     )
     # 자동차 경로 기반으로 도보·대중교통 추정
-    # (Naver Maps 기본 플랜 = 자동차 전용; 도보·대중교통은 별도 API)
+    # (Naver Maps Directions = 자동차 전용; 도보·대중교통은 거리 기반 추정)
     distance_m = directions.get("distance_m", 0)
     driving_min = max(1, directions.get("duration_sec", 0) // 60)
-    walking_min = max(1, distance_m // 80)    # 도보 약 4.8km/h = 80m/min
-    transit_min = max(1, int(driving_min * 1.4))  # 대중교통 추정 (환승·대기 포함)
+    walking_min = max(1, round(distance_m / 67))  # 도보 약 4km/h = 67m/min
+
+    # 대중교통: 1km 이하면 도보와 동일 (대중교통 탈 필요 없음)
+    # 1km 초과면 자가용의 1.5~2배 (환승·대기 포함)
+    if distance_m <= 1000:
+        transit_min = walking_min
+    else:
+        transit_min = max(1, int(driving_min * 1.5) + 5)  # 대기시간 5분 추가
 
     return {
         "hospital_id": hospital_id,

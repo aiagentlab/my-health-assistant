@@ -5,7 +5,7 @@ langgraph-fundamentals 스킬 규칙 준수:
 - 노드는 부분 dict만 반환 (전체 state 반환 금지)
 """
 from typing import Annotated, Optional
-from typing_extensions import TypedDict
+from typing_extensions import TypedDict, NotRequired
 import operator
 
 
@@ -64,5 +64,6 @@ class HealthConsultationState(TypedDict):
     selected_hospital: dict                 # 사용자가 선택한 병원
     emergency_flag: bool                    # 응급 증상 감지 여부
     emergency_keywords: list                # 감지된 응급 키워드 목록
+    rag_context: NotRequired[dict]          # RAG 검색 결과 (진료과 추천 근거)
     user_location: dict                     # {'lat': float, 'lng': float} 또는 {'address': str}
     owner_user_id: str                      # 세션 소유자 Clerk user_id (세션 하이재킹 방지)

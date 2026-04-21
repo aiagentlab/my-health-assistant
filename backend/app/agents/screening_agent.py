@@ -60,7 +60,7 @@ class ScreeningDataExtracted(BaseModel):
 def _get_llm(streaming: bool = False) -> ChatGoogleGenerativeAI:
     """Gemini Flash 인스턴스 (호출 시마다 새로 생성 — 상태 없음)"""
     return ChatGoogleGenerativeAI(
-        model="gemini-2.0-flash",
+        model="models/gemini-2.5-flash",
         google_api_key=os.environ["GOOGLE_API_KEY"],
         streaming=streaming,
         temperature=0.3,
@@ -130,11 +130,20 @@ def run_screening(state: HealthConsultationState) -> dict:
     llm = _get_llm(streaming=False)
     messages = state.get("messages", [])
     screening_data = state.get("screening_data", {})
+    rag_context = state.get("rag_context", {})
     current_step = screening_data.get("step", 1)
+    rag_context_text = (rag_context.get("context_text") or "").strip()
+    system_prompt = SYSTEM_PROMPT.format(current_step=current_step)
+    if rag_context_text:
+        system_prompt = (
+            f"{system_prompt}\n\n## 참고 컨텍스트 (RAG)\n"
+            f"{rag_context_text}\n"
+            "위 정보는 참고용이며, 반드시 현재 사용자 답변을 우선해 다음 문진 질문을 진행하세요."
+        )
 
     # ─── 1단계: 대화 응답 생성 ──────────────────────────────────────────────
     prompt = ChatPromptTemplate.from_messages([
-        SystemMessage(content=SYSTEM_PROMPT.format(current_step=current_step)),
+        SystemMessage(content=system_prompt),
         MessagesPlaceholder(variable_name="messages"),
     ])
     chain = prompt | llm

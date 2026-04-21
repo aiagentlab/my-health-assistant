@@ -6,25 +6,13 @@ import type {
   HospitalInfo,
   DirectionsResponse,
 } from './types';
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-
-// Helper to add auth headers
-function getHeaders(token?: string): HeadersInit {
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-  };
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
-  return headers;
-}
+import { API_BASE, buildAuthHeaders } from './config_minyeop';
 
 // POST /api/consultation/start
 export async function startConsultation(token?: string): Promise<StartConsultationResponse> {
   const res = await fetch(`${API_BASE}/api/consultation/start`, {
     method: 'POST',
-    headers: getHeaders(token),
+    headers: buildAuthHeaders(token),
     body: JSON.stringify({}),
   });
   if (!res.ok) throw new Error(`상담 시작 실패: ${res.statusText}`);
@@ -40,7 +28,7 @@ export async function sendMessage(
 ): Promise<void> {
   const res = await fetch(`${API_BASE}/api/consultation/message`, {
     method: 'POST',
-    headers: getHeaders(token),
+    headers: buildAuthHeaders(token),
     body: JSON.stringify({ session_id: sessionId, message }),
   });
 
@@ -77,7 +65,7 @@ export async function getDiagnosis(
 ): Promise<DiagnosisResult> {
   const params = new URLSearchParams({ session_id: sessionId });
   const res = await fetch(`${API_BASE}/api/consultation/diagnosis?${params}`, {
-    headers: getHeaders(token),
+    headers: buildAuthHeaders(token),
   });
   if (!res.ok) throw new Error(`진단 결과 조회 실패: ${res.statusText}`);
   return res.json();
@@ -90,9 +78,22 @@ export async function geocodeAddress(
 ): Promise<{ lat: number; lng: number; road_address: string } | null> {
   const params = new URLSearchParams({ address });
   const res = await fetch(`${API_BASE}/api/hospital/geocode?${params}`, {
-    headers: getHeaders(token),
+    headers: buildAuthHeaders(token),
   });
   if (!res.ok) return null;
+  return res.json();
+}
+
+// GET /api/hospital/places (장소 자동완성)
+export async function searchPlaces(
+  query: string,
+  token?: string
+): Promise<{ places: Array<{ name: string; address: string; category: string; lat: number; lng: number }>; total: number }> {
+  const params = new URLSearchParams({ query });
+  const res = await fetch(`${API_BASE}/api/hospital/places?${params}`, {
+    headers: buildAuthHeaders(token),
+  });
+  if (!res.ok) return { places: [], total: 0 };
   return res.json();
 }
 
@@ -111,7 +112,7 @@ export async function searchHospitals(
     radius: radius.toString(),
   });
   const res = await fetch(`${API_BASE}/api/hospital/search?${params}`, {
-    headers: getHeaders(token),
+    headers: buildAuthHeaders(token),
   });
   if (!res.ok) throw new Error(`병원 검색 실패: ${res.statusText}`);
   return res.json();
@@ -120,7 +121,7 @@ export async function searchHospitals(
 // GET /api/hospital/{id}
 export async function getHospitalDetail(hospitalId: string, token?: string): Promise<HospitalInfo> {
   const res = await fetch(`${API_BASE}/api/hospital/${hospitalId}`, {
-    headers: getHeaders(token),
+    headers: buildAuthHeaders(token),
   });
   if (!res.ok) throw new Error(`병원 정보 조회 실패: ${res.statusText}`);
   return res.json();
@@ -142,9 +143,24 @@ export async function getHospitalDirections(
     to_lng: toLng.toString(),
   });
   const res = await fetch(`${API_BASE}/api/hospital/${hospitalId}/directions?${params}`, {
-    headers: getHeaders(token),
+    headers: buildAuthHeaders(token),
   });
   if (!res.ok) throw new Error(`길찾기 실패: ${res.statusText}`);
+  return res.json();
+}
+
+// POST /api/consultation/resume
+export async function resumeConsultation(
+  sessionId: string,
+  decision: 'call_119' | 'continue_consultation',
+  token?: string
+): Promise<{ session_id: string; decision: string; phase: string }> {
+  const res = await fetch(`${API_BASE}/api/consultation/resume`, {
+    method: 'POST',
+    headers: buildAuthHeaders(token),
+    body: JSON.stringify({ session_id: sessionId, decision }),
+  });
+  if (!res.ok) throw new Error(`응급 재개 실패: ${res.statusText}`);
   return res.json();
 }
 
@@ -152,7 +168,7 @@ export async function getHospitalDirections(
 export async function downloadConsultationPDF(sessionId: string, token?: string): Promise<Blob> {
   const res = await fetch(`${API_BASE}/api/consultation/pdf`, {
     method: 'POST',
-    headers: getHeaders(token),
+    headers: buildAuthHeaders(token),
     body: JSON.stringify({ session_id: sessionId }),
   });
   if (!res.ok) throw new Error(`PDF 생성 실패: ${res.statusText}`);

@@ -102,17 +102,17 @@ def screening_node(state: HealthConsultationState) -> dict:
 
 
 # ─── 진단 노드 (placeholder) ──────────────────────────────────────────────────
-def diagnosis_node(state: HealthConsultationState) -> dict:
+async def diagnosis_node(state: HealthConsultationState) -> dict:
     """진단 에이전트 — app/agents/diagnosis_agent.py에서 실제 구현"""
     from app.agents.diagnosis_agent import run_diagnosis
-    return run_diagnosis(state)
+    return await run_diagnosis(state)
 
 
 # ─── 검색 노드 (placeholder) ──────────────────────────────────────────────────
-def search_node(state: HealthConsultationState) -> dict:
+async def search_node(state: HealthConsultationState) -> dict:
     """병원 검색 에이전트 — app/agents/search_agent.py에서 실제 구현"""
     from app.agents.search_agent import run_search
-    return run_search(state)
+    return await run_search(state)
 
 
 # ─── 정보 노드 (placeholder) ──────────────────────────────────────────────────

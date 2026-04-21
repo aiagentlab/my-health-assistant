@@ -57,17 +57,11 @@ export default function HospitalCard({ hospital, rank, onClick }: HospitalCardPr
           </Box>
           <Typography variant="caption" color="text.secondary">{hospital.address}</Typography>
         </Box>
-        <Chip
-          label={hospital.is_open_now ? '진료중' : '진료종료'}
-          size="small"
-          sx={{
-            bgcolor: hospital.is_open_now ? '#E6F7EE' : '#F6F8FA',
-            color: hospital.is_open_now ? '#2E9E6B' : '#6B7D8E',
-            fontWeight: 600,
-            height: 22,
-            ml: 1,
-          }}
-        />
+        {hospital.hospital_type && (
+          <Typography variant="caption" color="text.secondary" sx={{ ml: 1, flexShrink: 0 }}>
+            {hospital.hospital_type}
+          </Typography>
+        )}
       </Box>
 
       <Box sx={{ display: 'flex', gap: 2 }}>
